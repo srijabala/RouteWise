@@ -27,6 +27,11 @@ public class BusScheduleService {
 
     public List<String> getAvailableTravelDates() {
 
-    return busScheduleDAO.getAvailableTravelDates();
-}
+        return busScheduleDAO.getAvailableTravelDates();
+    }
+
+    public List<BusSchedule> getTodaysSchedules() {
+
+        return busScheduleDAO.getTodaysSchedules();
+    }
 }
