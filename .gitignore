@@ -1,0 +1,15 @@
+# Java compiled files
+out/
+*.class
+
+# IDE files
+.idea/
+*.iml
+
+# Local environment / secrets
+.env
+config/local.properties
+
+# OS files
+.DS_Store
+Thumbs.db
