@@ -11,6 +11,7 @@ import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.GridLayout;
 import java.awt.Insets;
+import java.awt.Rectangle;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -25,6 +26,8 @@ import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
+import javax.swing.JSeparator;
+import javax.swing.Scrollable;
 import javax.swing.SwingConstants;
 import javax.swing.SwingWorker;
 import javax.swing.border.EmptyBorder;
@@ -65,6 +68,14 @@ public class CustomerDashboard extends JFrame {
     private JPanel todayPanel;
     private JPanel resultsPanel;
 
+    // ---------- Smart Filter UI ----------
+    private JComboBox<String> busTypeFilterCombo;
+    private JComboBox<String> timeFilterCombo;
+    private JComboBox<String> minSeatsFilterCombo;
+    private JComboBox<String> sortCombo;
+    private JLabel resultsCountLabel;
+    private boolean isUpdatingFilters = false;
+
     public CustomerDashboard(User user) {
         this.user = user;
         busScheduleService = new BusScheduleService();
@@ -89,29 +100,41 @@ public class CustomerDashboard extends JFrame {
         root.setBackground(BG);
         root.add(header(), BorderLayout.NORTH);
 
-        JPanel content = new JPanel();
-        content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
-        content.setBackground(BG);
+        ScrollablePanel content = new ScrollablePanel();
         content.setBorder(new EmptyBorder(24, 34, 32, 34));
 
         content.add(searchCard());
         content.add(Box.createVerticalStrut(22));
+
         content.add(todaySection());
         content.add(Box.createVerticalStrut(22));
+
         content.add(supportSection());
         content.add(Box.createVerticalStrut(24));
-        content.add(sectionTitle("Available Buses"));
+
+        content.add(availableBusesHeaderCard());
+        content.add(Box.createVerticalStrut(14));
 
         resultsPanel = verticalPanel();
-        resultsPanel.add(infoCard("Search for a route and travel date to view buses."));
+        resultsPanel.add(
+                infoCard(
+                        "Search for a route and travel date to view buses."
+                )
+        );
         content.add(resultsPanel);
 
         JScrollPane scroll = new JScrollPane(content);
         scroll.setBorder(null);
+        scroll.setHorizontalScrollBarPolicy(
+                JScrollPane.HORIZONTAL_SCROLLBAR_NEVER
+        );
+        scroll.setVerticalScrollBarPolicy(
+                JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED
+        );
         scroll.getViewport().setBackground(BG);
         scroll.getVerticalScrollBar().setUnitIncrement(16);
-        root.add(scroll, BorderLayout.CENTER);
 
+        root.add(scroll, BorderLayout.CENTER);
         add(root);
 
         searchButton.addActionListener(e -> searchBuses());
@@ -135,12 +158,29 @@ public class CustomerDashboard extends JFrame {
         brand.add(name);
         brand.add(sub);
 
-       JLabel welcome = label("Welcome, " + user.getFullName(), 24, 
-        Font.BOLD, WHITE);
-welcome.setPreferredSize(new Dimension(260, 45));
-welcome.setHorizontalAlignment(SwingConstants.RIGHT);
+        JPanel rightPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 12, 0));
+        rightPanel.setOpaque(false);
+
+        JLabel welcome = label("Welcome, " + (user.getFullName() != null ? user.getFullName() : "Customer"), 15, Font.BOLD, WHITE);
+        rightPanel.add(welcome);
+
+        JButton myBookingsBtn = secondaryButton("My Bookings");
+        myBookingsBtn.addActionListener(e -> new BookingHistoryFrame(user));
+        rightPanel.add(myBookingsBtn);
+
+        JButton contactBtn = secondaryButton("Contact Us");
+        contactBtn.addActionListener(e -> openContactUs());
+        rightPanel.add(contactBtn);
+
+        JButton logoutBtn = secondaryButton("Logout");
+        logoutBtn.addActionListener(e -> {
+            dispose();
+            new WelcomeFrame();
+        });
+        rightPanel.add(logoutBtn);
+
         p.add(brand, BorderLayout.WEST);
-        p.add(welcome, BorderLayout.EAST);
+        p.add(rightPanel, BorderLayout.EAST);
         return p;
     }
 
@@ -332,7 +372,7 @@ form.add(searchButton, gbc);
 
         section.add(sectionTitle("Travel Support"), BorderLayout.NORTH);
 
-        JPanel grid = new JPanel(new GridLayout(1, 4, 12, 0));
+        JPanel grid = new JPanel(new GridLayout(1, 5, 10, 0));
         grid.setOpaque(false);
 
         grid.add(supportCard("AI TRAVEL ASSISTANT",
@@ -350,6 +390,10 @@ form.add(searchButton, gbc);
         grid.add(supportCard("DEVOTIONAL TRIPS",
                 "Travel-support packages and what they include.",
                 PURPLE, e -> devotionalInfo()));
+
+        grid.add(supportCard("CONTACT US",
+                "Helplines, support email and 24/7 customer care.",
+                NAVY, e -> openContactUs()));
 
         section.add(grid, BorderLayout.CENTER);
         return section;
@@ -438,6 +482,12 @@ form.add(searchButton, gbc);
                 protected void done() {
                     try {
                         currentSchedules = get();
+                        isUpdatingFilters = true;
+                        if (busTypeFilterCombo != null) busTypeFilterCombo.setSelectedIndex(0);
+                        if (timeFilterCombo != null) timeFilterCombo.setSelectedIndex(0);
+                        if (minSeatsFilterCombo != null) minSeatsFilterCombo.setSelectedIndex(0);
+                        if (sortCombo != null) sortCombo.setSelectedIndex(0);
+                        isUpdatingFilters = false;
                         displayResults(currentSchedules);
                     } catch (Exception e) {
                         e.printStackTrace();
@@ -461,9 +511,25 @@ form.add(searchButton, gbc);
     private void displayResults(List<BusSchedule> schedules) {
         resultsPanel.removeAll();
 
-        if (schedules.isEmpty()) {
+        int totalCount = currentSchedules != null ? currentSchedules.size() : 0;
+        int filteredCount = schedules != null ? schedules.size() : 0;
+
+        if (resultsCountLabel != null) {
+            if (currentSchedules == null || currentSchedules.isEmpty()) {
+                resultsCountLabel.setText("0 buses found");
+            } else if (filteredCount == totalCount) {
+                resultsCountLabel.setText(totalCount + (totalCount == 1 ? " bus available" : " buses available"));
+            } else {
+                resultsCountLabel.setText(filteredCount + " of " + totalCount + " buses match filters");
+            }
+        }
+
+        if (currentSchedules == null || currentSchedules.isEmpty()) {
             resultsPanel.add(infoCard(
-                    "No buses were found for the selected route and date."));
+                    "Search for a route and travel date to view buses."));
+        } else if (schedules == null || schedules.isEmpty()) {
+            resultsPanel.add(infoCard(
+                    "No buses match the selected filters."));
         } else {
             for (BusSchedule s : schedules) {
                 resultsPanel.add(resultCard(s));
@@ -628,16 +694,227 @@ form.add(searchButton, gbc);
         dispose();
     }
 
+    private void openContactUs() {
+        new ContactUsDialog(this).setVisible(true);
+    }
+
+    private JPanel availableBusesHeaderCard() {
+        JPanel card = card();
+        card.setLayout(new BorderLayout(0, 14));
+
+        // Top Bar: Heading + Results Count Badge (Left) & Sort + Reset (Right)
+        JPanel topBar = new JPanel(new BorderLayout());
+        topBar.setOpaque(false);
+
+        JPanel leftHeading = new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 0));
+        leftHeading.setOpaque(false);
+
+        JLabel titleLabel = label("Available Buses", 20, Font.BOLD, TEXT);
+        resultsCountLabel = label("0 buses found", 12, Font.BOLD, BLUE);
+        resultsCountLabel.setOpaque(true);
+        resultsCountLabel.setBackground(new Color(230, 242, 242));
+        resultsCountLabel.setForeground(BLUE);
+        resultsCountLabel.setBorder(BorderFactory.createCompoundBorder(
+                new LineBorder(new Color(180, 215, 213), 1, true),
+                new EmptyBorder(4, 12, 4, 12)
+        ));
+
+        leftHeading.add(titleLabel);
+        leftHeading.add(resultsCountLabel);
+
+        JPanel rightControls = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
+        rightControls.setOpaque(false);
+
+        JLabel sortLabel = label("Sort by:", 12, Font.BOLD, MUTED);
+        sortCombo = new JComboBox<>(new String[] {
+                "Departure Time", "Fare: Low to High", "Available Seats: High to Low"
+        });
+        styleCombo(sortCombo);
+        sortCombo.setPreferredSize(new Dimension(180, 36));
+        sortCombo.addActionListener(e -> applyInMemoryFilters());
+
+        JButton resetBtn = secondaryButton("Reset Filters");
+        resetBtn.setPreferredSize(new Dimension(105, 36));
+        resetBtn.addActionListener(e -> {
+            isUpdatingFilters = true;
+            if (busTypeFilterCombo != null) busTypeFilterCombo.setSelectedIndex(0);
+            if (timeFilterCombo != null) timeFilterCombo.setSelectedIndex(0);
+            if (minSeatsFilterCombo != null) minSeatsFilterCombo.setSelectedIndex(0);
+            if (sortCombo != null) sortCombo.setSelectedIndex(0);
+            isUpdatingFilters = false;
+            if (currentSchedules != null && !currentSchedules.isEmpty()) {
+                displayResults(currentSchedules);
+            }
+        });
+
+        rightControls.add(sortLabel);
+        rightControls.add(sortCombo);
+        rightControls.add(resetBtn);
+
+        topBar.add(leftHeading, BorderLayout.WEST);
+        topBar.add(rightControls, BorderLayout.EAST);
+
+        // Separator
+        JSeparator sep = new JSeparator();
+        sep.setForeground(BORDER);
+        sep.setBackground(BORDER);
+
+        // Bottom Row: Filter Controls
+        busTypeFilterCombo = new JComboBox<>(new String[] {
+                "All Bus Types",
+                "AC Sleeper",
+                "AC Seater",
+                "Non-AC Sleeper",
+                "Non-AC Seater",
+                "Volvo Multi-Axle"
+        });
+
+        timeFilterCombo = new JComboBox<>(new String[] {
+                "Any Time", "Morning (6 AM - 12 PM)", "Afternoon (12 PM - 6 PM)", "Night (6 PM - 6 AM)"
+        });
+
+        minSeatsFilterCombo = new JComboBox<>(new String[] {
+                "Any Seats", "1+ Seat", "2+ Seats", "3+ Seats", "4+ Seats"
+        });
+
+        styleCombo(busTypeFilterCombo);
+        styleCombo(timeFilterCombo);
+        styleCombo(minSeatsFilterCombo);
+
+        busTypeFilterCombo.setPreferredSize(new Dimension(180, 38));
+        timeFilterCombo.setPreferredSize(new Dimension(210, 38));
+        minSeatsFilterCombo.setPreferredSize(new Dimension(160, 38));
+
+        busTypeFilterCombo.addActionListener(e -> applyInMemoryFilters());
+        timeFilterCombo.addActionListener(e -> applyInMemoryFilters());
+        minSeatsFilterCombo.addActionListener(e -> applyInMemoryFilters());
+
+        JPanel filterRow = new JPanel(new GridBagLayout());
+        filterRow.setOpaque(false);
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.gridy = 0;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.insets = new Insets(0, 0, 0, 16);
+
+        gbc.gridx = 0; gbc.weightx = 1.0;
+        filterRow.add(field("BUS TYPE", busTypeFilterCombo), gbc);
+
+        gbc.gridx = 1; gbc.weightx = 1.0;
+        filterRow.add(field("DEPARTURE TIME", timeFilterCombo), gbc);
+
+        gbc.gridx = 2; gbc.weightx = 1.0; gbc.insets = new Insets(0, 0, 0, 0);
+        filterRow.add(field("SEATS AVAILABLE", minSeatsFilterCombo), gbc);
+
+        // Assembly
+        JPanel cardContent = verticalPanel();
+        cardContent.add(topBar);
+        cardContent.add(Box.createVerticalStrut(14));
+        cardContent.add(sep);
+        cardContent.add(Box.createVerticalStrut(14));
+        cardContent.add(filterRow);
+
+        card.add(cardContent, BorderLayout.CENTER);
+        return card;
+    }
+
+    private void applyInMemoryFilters() {
+        if (isUpdatingFilters) return;
+        if (currentSchedules == null || currentSchedules.isEmpty()) {
+            displayResults(new ArrayList<>());
+            return;
+        }
+
+        String selectedType = (String) busTypeFilterCombo.getSelectedItem();
+        String selectedTime = (String) timeFilterCombo.getSelectedItem();
+        String selectedMinSeats = (String) minSeatsFilterCombo.getSelectedItem();
+        String selectedSort = (String) sortCombo.getSelectedItem();
+
+        List<BusSchedule> filtered = new ArrayList<>();
+
+        for (BusSchedule s : currentSchedules) {
+            // 1. Bus Type Filter
+            // Filter against the exact bus type stored in the CURRENT
+            // search results. Do not use a loose contains() match because
+            // "AC" would also match "Non-AC".
+            if (selectedType != null && !selectedType.equals("All Bus Types")) {
+                String actualType = s.getBusType() == null
+                        ? ""
+                        : s.getBusType().trim();
+
+                if (!actualType.equalsIgnoreCase(selectedType)) {
+                    continue;
+                }
+            }
+
+            // 2. Departure Time Filter
+            if (selectedTime != null && !selectedTime.equals("Any Time")) {
+                int hour = s.getDepartureTime() != null ? s.getDepartureTime().getHour() : -1;
+                if (hour != -1) {
+                    if (selectedTime.startsWith("Morning") && (hour < 6 || hour >= 12)) continue;
+                    if (selectedTime.startsWith("Afternoon") && (hour < 12 || hour >= 18)) continue;
+                    if (selectedTime.startsWith("Night") && (hour >= 6 && hour < 18)) continue;
+                }
+            }
+
+            // 3. Minimum Available Seats Filter
+            if (selectedMinSeats != null && !selectedMinSeats.equals("Any Seats")) {
+                int minSeats = 0;
+                if (selectedMinSeats.startsWith("1+")) minSeats = 1;
+                else if (selectedMinSeats.startsWith("2+")) minSeats = 2;
+                else if (selectedMinSeats.startsWith("3+")) minSeats = 3;
+                else if (selectedMinSeats.startsWith("4+")) minSeats = 4;
+
+                if (s.getAvailableSeats() < minSeats) {
+                    continue;
+                }
+            }
+
+            filtered.add(s);
+        }
+
+        // Apply Sorting
+        if (selectedSort != null) {
+            if (selectedSort.contains("Fare")) {
+                filtered.sort((a, b) -> Double.compare(a.getFare(), b.getFare()));
+            } else if (selectedSort.contains("Available Seats")) {
+                filtered.sort((a, b) -> Integer.compare(b.getAvailableSeats(), a.getAvailableSeats()));
+            } else {
+                // Default: Departure Time
+                filtered.sort((a, b) -> {
+                    if (a.getDepartureTime() == null || b.getDepartureTime() == null) return 0;
+                    return a.getDepartureTime().compareTo(b.getDepartureTime());
+                });
+            }
+        }
+
+        displayResults(filtered);
+    }
+
     // =========================================================
     // UI HELPERS
     // =========================================================
 
-    private JPanel sectionTitle(String text) {
-        JPanel p = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
-        p.setOpaque(false);
-        p.add(label(text, 19, Font.BOLD, TEXT));
-        return p;
-    }
+   private JPanel sectionTitle(String text) {
+    JPanel p = new JPanel(
+            new FlowLayout(
+                    FlowLayout.LEFT,
+                    0,
+                    0
+            )
+    );
+
+    p.setOpaque(false);
+    p.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+    p.add(label(
+            text,
+            19,
+            Font.BOLD,
+            TEXT
+    ));
+
+    return p;
+}
 
     private JPanel card() {
         JPanel p = new JPanel(new BorderLayout(0, 17));
@@ -770,5 +1047,37 @@ form.add(searchButton, gbc);
     private String dateTime(java.time.LocalDateTime value) {
         if (value == null) return "N/A";
         return value.format(DateTimeFormatter.ofPattern("dd MMM, hh:mm a"));
+    }
+
+    private static class ScrollablePanel extends JPanel implements Scrollable {
+        public ScrollablePanel() {
+            setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
+            setBackground(BG);
+        }
+
+        @Override
+        public Dimension getPreferredScrollableViewportSize() {
+            return getPreferredSize();
+        }
+
+        @Override
+        public int getScrollableUnitIncrement(Rectangle visibleRect, int orientation, int direction) {
+            return 16;
+        }
+
+        @Override
+        public int getScrollableBlockIncrement(Rectangle visibleRect, int orientation, int direction) {
+            return 64;
+        }
+
+        @Override
+        public boolean getScrollableTracksViewportWidth() {
+            return true;
+        }
+
+        @Override
+        public boolean getScrollableTracksViewportHeight() {
+            return false;
+        }
     }
 }

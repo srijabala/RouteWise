@@ -155,58 +155,55 @@ public class BookingHistoryFrame extends JFrame {
 
 
                 if ("CONFIRMED".equals(booking.getStatus())) {
+                    JPanel actionRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
+                    actionRow.setOpaque(false);
+                    actionRow.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-    JButton cancelButton =
-            new JButton("Cancel Booking");
+                    JButton pdfButton = new JButton("🎟️ View / Print Ticket");
+                    pdfButton.setFont(new Font("Segoe UI", Font.BOLD, 12));
+                    pdfButton.setBackground(new Color(28, 105, 101));
+                    pdfButton.setForeground(Color.WHITE);
+                    pdfButton.setFocusPainted(false);
+                    pdfButton.addActionListener(e -> {
+                        List<String> seatNums = bookingService.getSeatNumbersForBooking(booking.getBookingId());
+                        new TicketPreviewDialog(this, user, booking, seatNums).setVisible(true);
+                    });
 
-    cancelButton.addActionListener(e -> {
+                    JButton cancelButton = new JButton("Cancel Booking");
+                    cancelButton.setFont(new Font("Segoe UI", Font.PLAIN, 12));
 
-        int choice =
-                JOptionPane.showConfirmDialog(
-                        this,
-                        "Are you sure you want to cancel Booking #"
-                        + booking.getBookingId()
-                        + "?",
-                        "Confirm Cancellation",
-                        JOptionPane.YES_NO_OPTION
-                );
+                    cancelButton.addActionListener(e -> {
+                        int choice = JOptionPane.showConfirmDialog(
+                                this,
+                                "Are you sure you want to cancel Booking #" + booking.getBookingId() + "?",
+                                "Confirm Cancellation",
+                                JOptionPane.YES_NO_OPTION
+                        );
 
-        if (choice != JOptionPane.YES_OPTION) {
-            return;
-        }
+                        if (choice != JOptionPane.YES_OPTION) {
+                            return;
+                        }
 
-        boolean success =
-                bookingService.cancelBooking(
-                        booking.getBookingId(),
-                        user.getUserId()
-                );
+                        boolean success = bookingService.cancelBooking(
+                                booking.getBookingId(),
+                                user.getUserId()
+                        );
 
-        if (success) {
+                        if (success) {
+                            JOptionPane.showMessageDialog(this, "Booking cancelled successfully.");
+                            dispose();
+                            new BookingHistoryFrame(user);
+                        } else {
+                            JOptionPane.showMessageDialog(this, "Unable to cancel booking.");
+                        }
+                    });
 
-            JOptionPane.showMessageDialog(
-                    this,
-                    "Booking cancelled successfully."
-            );
+                    actionRow.add(pdfButton);
+                    actionRow.add(cancelButton);
 
-            dispose();
-
-            new BookingHistoryFrame(user);
-
-        } else {
-
-            JOptionPane.showMessageDialog(
-                    this,
-                    "Unable to cancel booking."
-            );
-        }
-    });
-
-    bookingPanel.add(
-            Box.createVerticalStrut(10)
-    );
-
-    bookingPanel.add(cancelButton);
-}
+                    bookingPanel.add(Box.createVerticalStrut(10));
+                    bookingPanel.add(actionRow);
+                }
 
                 bookingPanel.add(
                         new JLabel(

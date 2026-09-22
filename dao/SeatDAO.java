@@ -115,4 +115,27 @@ public class SeatDAO {
 
     return femaleOccupiedSeatIds;
 }
+
+    public List<String> findSeatNumbersByBookingId(int bookingId) {
+        List<String> seatNumbers = new ArrayList<>();
+        String sql = """
+                SELECT s.seat_number
+                FROM seats s
+                JOIN booking_seats bs ON s.seat_id = bs.seat_id
+                WHERE bs.booking_id = ?
+                ORDER BY s.seat_id
+                """;
+        try (Connection connection = DatabaseConnection.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setInt(1, bookingId);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                while (resultSet.next()) {
+                    seatNumbers.add(resultSet.getString("seat_number"));
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return seatNumbers;
+    }
 }

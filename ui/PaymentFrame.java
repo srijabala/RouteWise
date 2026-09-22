@@ -254,19 +254,21 @@ public class PaymentFrame extends JFrame {
                     );
 
             if (success) {
-
-                JOptionPane.showMessageDialog(
+                String devoPkgName = (devotionalPackageId > 0) ? "Devotional Travel Package" : null;
+                new TicketPreviewDialog(
                         this,
-                        "Payment successful!\n"
-                        + "Booking confirmed!\n"
-                        + "Method: "
-                        + paymentMethod
-                        + "\nAmount: ₹"
-                        + totalAmount
-                );
+                        user,
+                        schedule,
+                        selectedSeats,
+                        totalAmount,
+                        paymentMethod,
+                        seniorCitizenCount,
+                        wheelchairCount,
+                        devoPkgName
+                ).setVisible(true);
 
+                new CustomerDashboard(user);
                 dispose();
-
             } else {
 
                 JOptionPane.showMessageDialog(

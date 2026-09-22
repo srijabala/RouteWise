@@ -64,4 +64,8 @@ public class BookingService {
     public boolean cancelBooking(int bookingId, int userId) {
         return bookingDAO.cancelBooking(bookingId, userId);
     }
+
+    public List<String> getSeatNumbersForBooking(int bookingId) {
+        return new dao.SeatDAO().findSeatNumbersByBookingId(bookingId);
+    }
 }
