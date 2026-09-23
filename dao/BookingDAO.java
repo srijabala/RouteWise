@@ -18,271 +18,345 @@ public class BookingDAO {
         paymentDAO = new PaymentDAO();
     }
 
-    public boolean createBooking(
-            int userId,
-            int scheduleId,
-            List<Seat> selectedSeats,
-            double totalAmount,
-            String paymentMethod,
-            int devotionalPackageId,
-            int seniorCitizenCount,
-            int wheelchairCount) {
+ public boolean createBooking(
+        int userId,
+        int scheduleId,
+        List<Seat> selectedSeats,
+        double totalAmount,
+        String paymentMethod,
+        int devotionalPackageId,
+        int seniorCitizenCount,
+        int wheelchairCount) {
 
-        Connection connection = null;
+    Connection connection = null;
 
-        try {
+    try {
+        connection = DatabaseConnection.getConnection();
+        connection.setAutoCommit(false);
 
-            connection = DatabaseConnection.getConnection();
+        /*
+         * STEP 1:
+         * Lock the schedule row.
+         *
+         * This makes bookings for the same schedule
+         * execute one at a time.
+         */
+        String lockScheduleSql = """
+                SELECT schedule_id
+                FROM bus_schedules
+                WHERE schedule_id = ?
+                FOR UPDATE
+                """;
 
-            connection.setAutoCommit(false);
+        try (PreparedStatement statement =
+                     connection.prepareStatement(lockScheduleSql)) {
 
-            /*
-             * STEP 1:
-             * Lock the schedule row.
-             */
-            String lockScheduleSql = """
-                    SELECT schedule_id
-                    FROM bus_schedules
-                    WHERE schedule_id = ?
-                    FOR UPDATE
-                    """;
+            statement.setInt(1, scheduleId);
 
-            try (PreparedStatement statement =
-                    connection.prepareStatement(lockScheduleSql)) {
+            try (ResultSet resultSet = statement.executeQuery()) {
 
-                statement.setInt(1, scheduleId);
-
-                try (ResultSet resultSet = statement.executeQuery()) {
-
-                    if (!resultSet.next()) {
-                        connection.rollback();
-                        return false;
-                    }
-                }
-            }
-
-            /*
-             * STEP 2:
-             * Check accessibility capacity.
-             */
-            String accessibilitySql = """
-                    SELECT
-                        COALESCE(SUM(senior_citizen_count), 0)
-                            AS senior_count,
-                        COALESCE(SUM(wheelchair_count), 0)
-                            AS wheelchair_count
-                    FROM bookings
-                    WHERE schedule_id = ?
-                      AND status = 'CONFIRMED'
-                    """;
-
-            try (PreparedStatement statement =
-                    connection.prepareStatement(accessibilitySql)) {
-
-                statement.setInt(1, scheduleId);
-
-                try (ResultSet resultSet = statement.executeQuery()) {
-
-                    if (resultSet.next()) {
-
-                        int existingSeniorCount =
-                                resultSet.getInt("senior_count");
-
-                        int existingWheelchairCount =
-                                resultSet.getInt("wheelchair_count");
-
-                        if (existingSeniorCount + seniorCitizenCount > 4) {
-                            connection.rollback();
-                            return false;
-                        }
-
-                        if (existingWheelchairCount + wheelchairCount > 2) {
-                            connection.rollback();
-                            return false;
-                        }
-                    }
-                }
-            }
-
-            /*
-             * STEP 3:
-             * Create booking.
-             */
-            String bookingSql = """
-                    INSERT INTO bookings
-                    (
-                        user_id,
-                        schedule_id,
-                        total_seats,
-                        total_amount,
-                        devotional_package_id,
-                        senior_citizen_count,
-                        wheelchair_count
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                    """;
-
-            int bookingId;
-
-            try (PreparedStatement statement =
-                    connection.prepareStatement(
-                            bookingSql,
-                            PreparedStatement.RETURN_GENERATED_KEYS)) {
-
-                statement.setInt(1, userId);
-                statement.setInt(2, scheduleId);
-                statement.setInt(3, selectedSeats.size());
-                statement.setDouble(4, totalAmount);
-
-                if (devotionalPackageId == 0) {
-
-                    statement.setNull(
-                            5,
-                            java.sql.Types.INTEGER
-                    );
-
-                } else {
-
-                    statement.setInt(
-                            5,
-                            devotionalPackageId
-                    );
-                }
-
-                statement.setInt(6, seniorCitizenCount);
-                statement.setInt(7, wheelchairCount);
-
-                statement.executeUpdate();
-
-                try (ResultSet resultSet =
-                        statement.getGeneratedKeys()) {
-
-                    if (!resultSet.next()) {
-                        connection.rollback();
-                        return false;
-                    }
-
-                    bookingId = resultSet.getInt(1);
-                }
-            }
-
-            /*
-             * STEP 4:
-             * Mark seats as BOOKED.
-             */
-            String updateSeatSql = """
-                    UPDATE seats
-                    SET status = 'BOOKED'
-                    WHERE seat_id = ?
-                    """;
-
-            try (PreparedStatement statement =
-                    connection.prepareStatement(updateSeatSql)) {
-
-                for (Seat seat : selectedSeats) {
-
-                    statement.setInt(
-                            1,
-                            seat.getSeatId()
-                    );
-
-                    statement.addBatch();
-                }
-
-                statement.executeBatch();
-            }
-
-            /*
-             * STEP 5:
-             * Store booking-seat relationships.
-             */
-            String bookingSeatSql = """
-                    INSERT INTO booking_seats
-                    (
-                        booking_id,
-                        seat_id
-                    )
-                    VALUES (?, ?)
-                    """;
-
-            try (PreparedStatement statement =
-                    connection.prepareStatement(bookingSeatSql)) {
-
-                for (Seat seat : selectedSeats) {
-
-                    statement.setInt(
-                            1,
-                            bookingId
-                    );
-
-                    statement.setInt(
-                            2,
-                            seat.getSeatId()
-                    );
-
-                    statement.addBatch();
-                }
-
-                statement.executeBatch();
-            }
-
-            /*
-             * STEP 6:
-             * Create payment using SAME connection.
-             */
-            boolean paymentCreated =
-                    paymentDAO.createPayment(
-                            connection,
-                            bookingId,
-                            totalAmount,
-                            paymentMethod
-                    );
-
-            if (!paymentCreated) {
-
-                connection.rollback();
-                return false;
-            }
-
-            /*
-             * STEP 7:
-             * Commit everything.
-             */
-            connection.commit();
-
-            return true;
-
-        } catch (SQLException e) {
-
-            if (connection != null) {
-
-                try {
+                if (!resultSet.next()) {
                     connection.rollback();
-                } catch (SQLException rollbackException) {
-                    rollbackException.printStackTrace();
-                }
-            }
-
-            e.printStackTrace();
-
-            return false;
-
-        } finally {
-
-            if (connection != null) {
-
-                try {
-
-                    connection.setAutoCommit(true);
-                    connection.close();
-
-                } catch (SQLException e) {
-
-                    e.printStackTrace();
+                    return false;
                 }
             }
         }
+
+        /*
+         * STEP 2:
+         * Lock and verify every selected seat.
+         *
+         * Because the schedule row is already locked,
+         * another normal booking for this schedule cannot
+         * pass this section at the same time.
+         *
+         * We still explicitly lock the selected seat rows
+         * and verify their status.
+         */
+        String checkSeatSql = """
+                SELECT seat_id, schedule_id, status
+                FROM seats
+                WHERE seat_id = ?
+                FOR UPDATE
+                """;
+
+        try (PreparedStatement statement =
+                     connection.prepareStatement(checkSeatSql)) {
+
+            for (Seat seat : selectedSeats) {
+
+                statement.setInt(1, seat.getSeatId());
+
+                try (ResultSet resultSet = statement.executeQuery()) {
+
+                    if (!resultSet.next()) {
+                        connection.rollback();
+                        return false;
+                    }
+
+                    int seatScheduleId =
+                            resultSet.getInt("schedule_id");
+
+                    String seatStatus =
+                            resultSet.getString("status");
+
+                    /*
+                     * Make sure the seat actually belongs
+                     * to the schedule being booked.
+                     */
+                    if (seatScheduleId != scheduleId) {
+                        connection.rollback();
+                        return false;
+                    }
+
+                    /*
+                     * Do not allow an already-booked seat.
+                     */
+                    if (!"AVAILABLE".equals(seatStatus)) {
+                        connection.rollback();
+                        return false;
+                    }
+                }
+            }
+        }
+
+        /*
+         * STEP 3:
+         * Check accessibility capacity.
+         */
+        String accessibilitySql = """
+                SELECT
+                    COALESCE(SUM(senior_citizen_count), 0)
+                        AS senior_count,
+                    COALESCE(SUM(wheelchair_count), 0)
+                        AS wheelchair_count
+                FROM bookings
+                WHERE schedule_id = ?
+                  AND status = 'CONFIRMED'
+                """;
+
+        try (PreparedStatement statement =
+                     connection.prepareStatement(accessibilitySql)) {
+
+            statement.setInt(1, scheduleId);
+
+            try (ResultSet resultSet = statement.executeQuery()) {
+
+                if (resultSet.next()) {
+
+                    int existingSeniorCount =
+                            resultSet.getInt("senior_count");
+
+                    int existingWheelchairCount =
+                            resultSet.getInt("wheelchair_count");
+
+                    if (existingSeniorCount + seniorCitizenCount > 4) {
+                        connection.rollback();
+                        return false;
+                    }
+
+                    if (existingWheelchairCount + wheelchairCount > 2) {
+                        connection.rollback();
+                        return false;
+                    }
+                }
+            }
+        }
+
+        /*
+         * STEP 4:
+         * Create booking.
+         */
+        String bookingSql = """
+                INSERT INTO bookings
+                (
+                    user_id,
+                    schedule_id,
+                    total_seats,
+                    total_amount,
+                    devotional_package_id,
+                    senior_citizen_count,
+                    wheelchair_count
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """;
+
+        int bookingId;
+
+        try (PreparedStatement statement =
+                     connection.prepareStatement(
+                             bookingSql,
+                             PreparedStatement.RETURN_GENERATED_KEYS)) {
+
+            statement.setInt(1, userId);
+            statement.setInt(2, scheduleId);
+            statement.setInt(3, selectedSeats.size());
+            statement.setDouble(4, totalAmount);
+
+            if (devotionalPackageId == 0) {
+                statement.setNull(
+                        5,
+                        java.sql.Types.INTEGER
+                );
+            } else {
+                statement.setInt(
+                        5,
+                        devotionalPackageId
+                );
+            }
+
+            statement.setInt(6, seniorCitizenCount);
+            statement.setInt(7, wheelchairCount);
+
+            statement.executeUpdate();
+
+            try (ResultSet resultSet =
+                         statement.getGeneratedKeys()) {
+
+                if (!resultSet.next()) {
+                    connection.rollback();
+                    return false;
+                }
+
+                bookingId = resultSet.getInt(1);
+            }
+        }
+
+        /*
+         * STEP 5:
+         * Mark the verified seats as BOOKED.
+         */
+        String updateSeatSql = """
+                UPDATE seats
+                SET status = 'BOOKED'
+                WHERE seat_id = ?
+                  AND schedule_id = ?
+                  AND status = 'AVAILABLE'
+                """;
+
+        try (PreparedStatement statement =
+                     connection.prepareStatement(updateSeatSql)) {
+
+            for (Seat seat : selectedSeats) {
+
+                statement.setInt(
+                        1,
+                        seat.getSeatId()
+                );
+
+                statement.setInt(
+                        2,
+                        scheduleId
+                );
+
+                statement.addBatch();
+            }
+
+            int[] results = statement.executeBatch();
+
+            /*
+             * Every selected seat must have been updated.
+             * If not, something changed unexpectedly.
+             */
+            for (int result : results) {
+
+                if (result != 1 &&
+                        result != java.sql.Statement.SUCCESS_NO_INFO) {
+
+                    connection.rollback();
+                    return false;
+                }
+            }
+        }
+
+        /*
+         * STEP 6:
+         * Store booking-seat relationships.
+         */
+        String bookingSeatSql = """
+                INSERT INTO booking_seats
+                (
+                    booking_id,
+                    seat_id
+                )
+                VALUES (?, ?)
+                """;
+
+        try (PreparedStatement statement =
+                     connection.prepareStatement(bookingSeatSql)) {
+
+            for (Seat seat : selectedSeats) {
+
+                statement.setInt(
+                        1,
+                        bookingId
+                );
+
+                statement.setInt(
+                        2,
+                        seat.getSeatId()
+                );
+
+                statement.addBatch();
+            }
+
+            statement.executeBatch();
+        }
+
+        /*
+         * STEP 7:
+         * Create payment using SAME connection.
+         */
+        boolean paymentCreated =
+                paymentDAO.createPayment(
+                        connection,
+                        bookingId,
+                        totalAmount,
+                        paymentMethod
+                );
+
+        if (!paymentCreated) {
+            connection.rollback();
+            return false;
+        }
+
+        /*
+         * STEP 8:
+         * Commit everything atomically.
+         */
+        connection.commit();
+
+        return true;
+
+    } catch (SQLException e) {
+
+        if (connection != null) {
+
+            try {
+                connection.rollback();
+            } catch (SQLException rollbackException) {
+                rollbackException.printStackTrace();
+            }
+        }
+
+        e.printStackTrace();
+
+        return false;
+
+    } finally {
+
+        if (connection != null) {
+
+            try {
+                connection.setAutoCommit(true);
+                connection.close();
+
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
+        }
     }
+}
 
     public List<Booking> findBookingsByUserId(int userId) {
 

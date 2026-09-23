@@ -188,12 +188,37 @@ public class SeatSelectionFrame extends JFrame {
                 stopCard.add(stopNameLabel);
                 stopCard.add(Box.createVerticalStrut(4));
 
-                // Facilities
-                StringBuilder facilities = new StringBuilder();
+                // Rest Time
+                int duration = stop.getRestDurationMinutes() > 0 ? stop.getRestDurationMinutes() : 20;
+                JLabel restTimeLabel = new JLabel(
+                        "⏱ Rest Time: " + duration + " minutes"
+                );
+                restTimeLabel.setFont(EMOJI_FONT);
+                restTimeLabel.setForeground(new Color(71, 85, 105));
+                stopCard.add(restTimeLabel);
+                stopCard.add(Box.createVerticalStrut(4));
 
+                // Food Available & Menu
                 if (stop.isFoodAvailable()) {
-                    facilities.append("🍴 Food  ");
+                    JLabel foodHeaderLabel = new JLabel("🍴 Food Available");
+                    foodHeaderLabel.setFont(EMOJI_FONT);
+                    foodHeaderLabel.setForeground(new Color(16, 185, 129));
+                    stopCard.add(foodHeaderLabel);
+
+                    if (stop.getFoodMenu() != null && !stop.getFoodMenu().trim().isEmpty()) {
+                        JLabel foodMenuLabel = new JLabel(
+                                "<html><body style='width:220px; color:#475569;'>"
+                                + stop.getFoodMenu().trim()
+                                + "</body></html>"
+                        );
+                        foodMenuLabel.setFont(EMOJI_FONT);
+                        stopCard.add(foodMenuLabel);
+                    }
+                    stopCard.add(Box.createVerticalStrut(4));
                 }
+
+                // Other Facilities
+                StringBuilder facilities = new StringBuilder();
 
                 if (stop.isRestroomAvailable()) {
                     facilities.append("🚻 Restroom  ");
@@ -207,16 +232,18 @@ public class SeatSelectionFrame extends JFrame {
                     facilities.append("🅿 Parking");
                 }
 
-                JLabel facilitiesLabel =
-                        new JLabel(facilities.toString());
+                if (facilities.length() > 0) {
+                    JLabel facilitiesLabel =
+                            new JLabel(facilities.toString().trim());
 
-                facilitiesLabel.setFont(EMOJI_FONT);
-                facilitiesLabel.setForeground(
-                        new Color(16, 185, 129)
-                );
+                    facilitiesLabel.setFont(EMOJI_FONT);
+                    facilitiesLabel.setForeground(
+                            new Color(16, 185, 129)
+                    );
 
-                stopCard.add(facilitiesLabel);
-                stopCard.add(Box.createVerticalStrut(4));
+                    stopCard.add(facilitiesLabel);
+                    stopCard.add(Box.createVerticalStrut(4));
+                }
 
                 // Description
                 if (stop.getDescription() != null

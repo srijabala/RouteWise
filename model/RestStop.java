@@ -11,6 +11,8 @@ public class RestStop {
     private boolean wheelchairAccessible;
     private boolean parkingAvailable;
     private String description;
+    private int restDurationMinutes;
+    private String foodMenu;
 
     public int getStopId() {
         return stopId;
@@ -82,5 +84,21 @@ public class RestStop {
 
     public void setDescription(String description) {
         this.description = description;
+    }
+
+    public int getRestDurationMinutes() {
+        return restDurationMinutes;
+    }
+
+    public void setRestDurationMinutes(int restDurationMinutes) {
+        this.restDurationMinutes = restDurationMinutes;
+    }
+
+    public String getFoodMenu() {
+        return foodMenu;
+    }
+
+    public void setFoodMenu(String foodMenu) {
+        this.foodMenu = foodMenu;
     }
 }

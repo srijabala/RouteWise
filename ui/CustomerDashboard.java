@@ -205,7 +205,7 @@ public class CustomerDashboard extends JFrame {
             "Vijayawada", "Bhubaneswar", "Hyderabad", "Chennai",
             "Bengaluru", "Visakhapatnam", "Tirupati", "Srisailam",
             "Shirdi", "Varanasi", "Madurai", "Rameswaram",
-            "Ayodhya", "Pune"
+            "Ayodhya", "Pune","Ooty", "Mysuru", "Jaipur", "Agra"
     });
 
     dateBox = new JComboBox<>();
@@ -387,13 +387,17 @@ form.add(searchButton, gbc);
                 "Senior citizen and wheelchair assistance details.",
                 BLUE, e -> accessibility()));
 
-        grid.add(supportCard("DEVOTIONAL TRIPS",
-                "Travel-support packages and what they include.",
-                PURPLE, e -> devotionalInfo()));
+      grid.add(supportCard("DEVOTIONAL TRIPS",
+        "Travel-support packages and what they include.",
+        PURPLE, e -> devotionalInfo()));
 
-        grid.add(supportCard("CONTACT US",
-                "Helplines, support email and 24/7 customer care.",
-                NAVY, e -> openContactUs()));
+grid.add(supportCard("FAMILY PACKAGES",
+        "Family-friendly destinations, packages and trip planning.",
+        GREEN, e -> familyPackages()));
+
+grid.add(supportCard("CONTACT US",
+        "Helplines, support email and 24/7 customer care.",
+        NAVY, e -> openContactUs()));
 
         section.add(grid, BorderLayout.CENTER);
         return section;
@@ -683,7 +687,178 @@ form.add(searchButton, gbc);
 
         showDialog(p, "Devotional Package");
     }
+private void familyPackages() {
 
+    dao.FamilyPackageDAO packageDAO = new dao.FamilyPackageDAO();
+    dao.BusScheduleDAO scheduleDAO = new dao.BusScheduleDAO();
+
+    List<model.FamilyPackage> packages = packageDAO.getAllPackages();
+
+    if (packages.isEmpty()) {
+        JOptionPane.showMessageDialog(
+                this,
+                "Family packages could not be loaded.",
+                "Family Packages",
+                JOptionPane.WARNING_MESSAGE
+        );
+        return;
+    }
+
+    JPanel p = dialogPanel();
+
+    dialogTitle(p, "RouteWise Family Packages", GREEN);
+
+    // Destination selection
+    p.add(label("SELECT DESTINATION", 11, Font.BOLD, MUTED));
+    p.add(Box.createVerticalStrut(5));
+
+    JComboBox<String> destinationCombo = new JComboBox<>();
+
+    for (model.FamilyPackage familyPackage : packages) {
+        destinationCombo.addItem(familyPackage.getDestination());
+    }
+
+    styleCombo(destinationCombo);
+    destinationCombo.setPreferredSize(new Dimension(300, 38));
+    destinationCombo.setMaximumSize(new Dimension(300, 38));
+    destinationCombo.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+    p.add(destinationCombo);
+
+    p.add(Box.createVerticalStrut(12));
+
+    // Actual available travel dates
+    p.add(label("AVAILABLE TRAVEL DATE", 11, Font.BOLD, MUTED));
+    p.add(Box.createVerticalStrut(5));
+
+    JComboBox<String> packageDateCombo = new JComboBox<>();
+
+    styleCombo(packageDateCombo);
+    packageDateCombo.setPreferredSize(new Dimension(300, 38));
+    packageDateCombo.setMaximumSize(new Dimension(300, 38));
+    packageDateCombo.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+    p.add(packageDateCombo);
+
+    p.add(Box.createVerticalStrut(15));
+
+    JButton viewPackageButton = primaryButton("VIEW PACKAGE");
+    viewPackageButton.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+    p.add(viewPackageButton);
+
+    p.add(Box.createVerticalStrut(15));
+
+    JPanel detailsPanel = verticalPanel();
+    p.add(detailsPanel);
+
+    Runnable loadDates = () -> {
+
+        packageDateCombo.removeAllItems();
+
+        String selectedDestination =
+                (String) destinationCombo.getSelectedItem();
+
+        if (selectedDestination == null) {
+            return;
+        }
+
+        List<String> availableDates =
+                scheduleDAO.getAvailableTravelDatesForRoute(
+                        "Visakhapatnam",
+                        selectedDestination
+                );
+
+        if (availableDates.isEmpty()) {
+
+            packageDateCombo.addItem("No scheduled trips");
+
+        } else {
+
+            for (String date : availableDates) {
+                packageDateCombo.addItem(date);
+            }
+        }
+
+        packageDateCombo.setSelectedIndex(0);
+    };
+
+    Runnable showSelectedPackage = () -> {
+
+        String selectedDestination =
+                (String) destinationCombo.getSelectedItem();
+
+        String selectedDate =
+                (String) packageDateCombo.getSelectedItem();
+
+        detailsPanel.removeAll();
+
+        if (selectedDestination == null) {
+            refresh(detailsPanel);
+            return;
+        }
+
+        for (model.FamilyPackage familyPackage : packages) {
+
+            if (familyPackage.getDestination()
+                    .equals(selectedDestination)) {
+
+                String dateText;
+
+                if (selectedDate == null
+                        || selectedDate.equals("No scheduled trips")) {
+
+                    dateText = "No scheduled bus trip currently available.";
+
+                } else {
+
+                    dateText =
+                            "Available Bus Travel Date: " + selectedDate;
+                }
+
+                dialogSection(
+                        detailsPanel,
+                        familyPackage.getPackageName(),
+                        dateText
+                                + "\n\n"
+                                + "₹"
+                                + (int) familyPackage.getPricePerPerson()
+                                + " per person\n\n"
+                                + familyPackage.getDescription()
+                );
+
+                dialogSection(
+                        detailsPanel,
+                        "Important clarification",
+                        "This is a RouteWise travel-support package. "
+                                + "Hotel accommodation, attraction tickets, meals "
+                                + "and third-party services are not included unless "
+                                + "explicitly stated."
+                );
+
+                break;
+            }
+        }
+
+        refresh(detailsPanel);
+    };
+
+    destinationCombo.addActionListener(e -> {
+        loadDates.run();
+        showSelectedPackage.run();
+    });
+
+    viewPackageButton.addActionListener(
+            e -> showSelectedPackage.run()
+    );
+
+    loadDates.run();
+    showSelectedPackage.run();
+
+    showDialog(p, "Family Packages");
+}
+     
+        
     private void openAI() {
         String context = aiContextService.buildScheduleContext(currentSchedules);
         new AITravelAssistantFrame(context);

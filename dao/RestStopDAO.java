@@ -24,7 +24,9 @@ public class RestStopDAO {
                     restroom_available,
                     wheelchair_accessible,
                     parking_available,
-                    description
+                    description,
+                    rest_duration_minutes,
+                    food_menu
                 FROM rest_stops
                 WHERE route_id = ?
                 ORDER BY stop_order
@@ -77,6 +79,14 @@ public class RestStopDAO {
 
                     restStop.setDescription(
                             resultSet.getString("description")
+                    );
+
+                    restStop.setRestDurationMinutes(
+                            resultSet.getInt("rest_duration_minutes")
+                    );
+
+                    restStop.setFoodMenu(
+                            resultSet.getString("food_menu")
                     );
 
                     restStops.add(restStop);

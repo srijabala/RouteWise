@@ -18,7 +18,7 @@ public class WelcomeFrame extends JFrame {
         setSize(900, 550);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
-        setResizable(false);
+        setResizable(true);
 
         createUI();
 

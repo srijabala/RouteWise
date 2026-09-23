@@ -306,4 +306,49 @@ public List<String> getAvailableTravelDates() {
     return dates;
 }
 
+public List<String> getAvailableTravelDatesForRoute(
+        String sourceCity,
+        String destinationCity) {
+
+    List<String> dates = new ArrayList<>();
+
+    String sql = """
+            SELECT DISTINCT DATE(bs.departure_time) AS travel_date
+            FROM bus_schedules bs
+            JOIN routes r
+                ON bs.route_id = r.route_id
+            WHERE r.source_city = ?
+              AND r.destination_city = ?
+              AND bs.status = 'SCHEDULED'
+              AND bs.departure_time >= NOW()
+            ORDER BY DATE(bs.departure_time)
+            """;
+
+    try (Connection connection = DatabaseConnection.getConnection();
+         PreparedStatement statement =
+                 connection.prepareStatement(sql)) {
+
+        statement.setString(1, sourceCity);
+        statement.setString(2, destinationCity);
+
+        try (ResultSet resultSet = statement.executeQuery()) {
+
+            while (resultSet.next()) {
+
+                dates.add(
+                        resultSet.getDate("travel_date")
+                                .toLocalDate()
+                                .toString()
+                );
+            }
+        }
+
+    } catch (SQLException e) {
+        e.printStackTrace();
+    }
+
+    return dates;
 }
+
+}
+
