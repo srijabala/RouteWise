@@ -17,7 +17,6 @@ public class DatabaseConnection {
     public static Connection getConnection() throws SQLException {
 
         if (PASSWORD == null || PASSWORD.isBlank()) {
-
             throw new SQLException(
                     "ROUTEWISE_DB_PASSWORD environment variable is not set."
             );
