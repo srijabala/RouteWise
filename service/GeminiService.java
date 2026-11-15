@@ -6,7 +6,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import util.EnvLoader;
-
+java -cp "lib\mysql-connector-j-26.7.0.jar;out" main.MainApplicationjava -cp "lib\mysql-connector-j-26.7.0.jar;out" main.MainApplication
 public class GeminiService {
 
     private static final String API_KEY =

@@ -32,6 +32,7 @@ public class AITravelAssistantFrame extends JFrame {
         setVisible(true);
     }
 
+
     private void createUI() {
         JPanel mainPanel = new JPanel(new BorderLayout(12, 12));
         mainPanel.setBackground(new Color(248, 250, 252));

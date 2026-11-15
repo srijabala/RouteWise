@@ -13,3 +13,11 @@ config/local.properties
 # OS files
 .DS_Store
 Thumbs.db
+
+# Python virtual environment
+.venv/
+
+# College files - not part of RouteWise
+3231124312006 INTERNSHIP PPT.pptx
+RouteWise_Architecture_Workflow.pptx
+RouteWise_Architecture_Diagram.html
